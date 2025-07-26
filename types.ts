@@ -5,7 +5,7 @@ export type RollOutcome = 'Sucesso Crítico' | 'Sucesso Bom' | 'Sucesso' | 'Frac
 
 export interface RollResult {
   id: number;
-  type: 'manual' | 'attribute';
+  type: 'manual' | 'attribute' | 'sanity';
   source: string; // e.g., '20' for a D20, or 'Força' for an attribute roll
   rollValue: number;
   targetValue?: number;
@@ -18,13 +18,14 @@ export interface Stat {
 }
 
 export interface Attribute {
+  id: string;
   name: string;
   value: number;
 }
 
 export interface Skill {
   id: string;
-  name: string;
+  name:string;
   value: number;
   isFavorite?: boolean;
 }
@@ -78,6 +79,15 @@ export interface ImageSet {
   critical: string | null; // Image for <= 25% health
 }
 
+export interface Background {
+  personalDescription: string;
+  characteristics: string;
+  phobiasManias: { id: string; text: string }[];
+  importantPeople: { id: string; text: string }[];
+  valuableBelongings: { id: string; text: string }[];
+  importantPlaces: { id: string; text: string }[];
+}
+
 export interface Character {
   id:string;
   personalDetails: {
@@ -90,12 +100,13 @@ export interface Character {
     residence: string;
   };
   imageSet: ImageSet;
-  appearanceNotes: string;
+  background: Background;
   archetype: Archetype;
   stats: {
     life: Stat;
     sanity: Stat;
     occultism: Stat;
+    effort: Stat;
   };
   attributes: Attribute[];
   movement: number;
@@ -107,7 +118,21 @@ export interface Character {
   attributePoints: number;
   skillPoints: number;
   maskForm: MaskForm | null;
+  money: number;
 }
+
+export interface MasterAttributeTemplate {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface MasterSkillTemplate {
+  id: string;
+  name: string;
+  description: string;
+}
+
 
 export interface MasterItemTemplate {
   name: string;

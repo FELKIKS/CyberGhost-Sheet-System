@@ -1,17 +1,47 @@
 
-import React, { useState, useCallback, useMemo, ChangeEvent, useEffect } from 'react';
-import type { Character, Stat, Attribute, Skill, Weapon, Archetype, ImageSet, InventoryItem, MaskForm, Ritual, MasterItemTemplate, MasterRitualTemplate, RollResult, DiceType, RollOutcome } from './types';
+
+import React, { useState, useCallback, useMemo, ChangeEvent, useEffect, useRef } from 'react';
+import axios from 'axios';
+import type { Character, Stat, Attribute, Skill, Weapon, Archetype, ImageSet, InventoryItem, MaskForm, Ritual, MasterItemTemplate, MasterRitualTemplate, RollResult, DiceType, RollOutcome, Background, MasterAttributeTemplate, MasterSkillTemplate } from './types';
 import { LogoIcon, D20Icon, ritualSignComponents, RitualSignSelector } from './components/Icons';
 import { DiceRoller } from './components/DiceRoller';
 import { Inventory } from './components/Inventory';
 
-// --- DATA STORAGE ---
-const DB_KEY = 'cyberghost_operative_db';
-const MASTER_ITEMS_KEY = 'cyberghost_master_items';
-const MASTER_RITUALS_KEY = 'cyberghost_master_rituals';
+// --- API CLIENT ---
+// This section replaces the previous localStorage logic with API calls.
+// You will need to implement a backend server that provides these endpoints.
+
+const api = axios.create({
+  baseURL: 'http://localhost:3001/api', // This should point to your running backend server
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Character endpoints
+const getCharacters = () => api.get<Character[]>('/characters');
+const getCharacter = (id: string) => api.get<Character>(`/characters/${id}`);
+const createCharacter = (characterData: Omit<Character, 'id'> | Character) => api.post<Character>('/characters', characterData);
+const updateCharacter = (id: string, characterData: Omit<Character, 'id'> | Character) => api.put(`/characters/${id}`, characterData);
+const deleteCharacter = (id: string) => api.delete(`/characters/${id}`);
+
+// Master Data endpoints
+const getMasterAttributes = () => api.get<MasterAttributeTemplate[]>('/master-data/attributes');
+const saveMasterAttributes = (data: MasterAttributeTemplate[]) => api.put('/master-data/attributes', data);
+
+const getMasterSkills = () => api.get<MasterSkillTemplate[]>('/master-data/skills');
+const saveMasterSkills = (data: MasterSkillTemplate[]) => api.put('/master-data/skills', data);
+
+const getMasterItemTemplates = () => api.get<MasterItemTemplate[]>('/master-data/items');
+const saveMasterItemTemplates = (data: MasterItemTemplate[]) => api.put('/master-data/items', data);
+
+const getMasterRitualTemplates = () => api.get<MasterRitualTemplate[]>('/master-data/rituals');
+const saveMasterRitualTemplates = (data: MasterRitualTemplate[]) => api.put('/master-data/rituals', data);
 
 
-const initialCharacterTemplate: Omit<Character, 'id' | 'attributePoints' | 'skillPoints'> = {
+// --- DEFAULT DATA & TEMPLATES ---
+
+const initialCharacterTemplate: Omit<Character, 'id' | 'attributePoints' | 'skillPoints' | 'attributes' | 'skills'> = {
   personalDetails: {
     name: 'Novo Operativo', player: 'Jogador', occupation: 'Ocupação', age: 'Idade',
     gender: 'Gênero', birthplace: 'Local de Nascimento', residence: 'Localização Atual',
@@ -22,45 +52,23 @@ const initialCharacterTemplate: Omit<Character, 'id' | 'attributePoints' | 'skil
     wounded: null,
     critical: null,
   },
-  appearanceNotes: "Descreva a aparência e o equipamento do operativo...",
+  background: {
+    personalDescription: "Descreva a aparência e o equipamento do operativo...",
+    characteristics: "",
+    phobiasManias: [],
+    importantPeople: [],
+    valuableBelongings: [],
+    importantPlaces: [],
+  },
   archetype: 'Nenhum',
   stats: {
     life: { current: 20, max: 20 },
     sanity: { current: 80, max: 80 },
     occultism: { current: 5, max: 100 },
+    effort: { current: 15, max: 15 },
   },
-  attributes: [
-    { name: 'Força', value: 10 }, { name: 'Destreza', value: 10 },
-    { name: 'Constituição', value: 10 }, { name: 'Aparência', value: 10 },
-    { name: 'Educação', value: 10 }, { name: 'Inteligência', value: 10 },
-    { name: 'Poder', value: 10 }, { name: 'Sorte', value: 10 },
-  ],
   movement: 7,
   size: 10,
-  skills: [
-    { id: '1', name: 'Atletismo', value: 10, isFavorite: false },
-    { id: '2', name: 'Atualidades', value: 10, isFavorite: false },
-    { id: '3', name: 'Ciência', value: 10, isFavorite: false },
-    { id: '4', name: 'Diplomacia', value: 10, isFavorite: false },
-    { id: '5', name: 'Enganação', value: 10, isFavorite: false },
-    { id: '6', name: 'Fortitude', value: 10, isFavorite: true },
-    { id: '7', name: 'Furtividade', value: 10, isFavorite: true },
-    { id: '8', name: 'Intimidação', value: 10, isFavorite: false },
-    { id: '9', name: 'Investigação', value: 10, isFavorite: true },
-    { id: '10', name: 'Luta', value: 10, isFavorite: false },
-    { id: '11', name: 'Medicina', value: 10, isFavorite: false },
-    { id: '12', name: 'Ocultismo', value: 10, isFavorite: true },
-    { id: '13', name: 'Percepção', value: 25, isFavorite: true },
-    { id: '14', name: 'Pilotagem', value: 10, isFavorite: false },
-    { id: '15', name: 'Pontaria', value: 10, isFavorite: false },
-    { id: '16', name: 'Prestidigitação', value: 10, isFavorite: false },
-    { id: '17', name: 'Profissão', value: 10, isFavorite: false },
-    { id: '18', name: 'Reflexos', value: 10, isFavorite: false },
-    { id: '19', name: 'Religião', value: 10, isFavorite: false },
-    { id: '20', name: 'Tática', value: 10, isFavorite: false },
-    { id: '21', name: 'Tecnologia', value: 10, isFavorite: false },
-    { id: '22', name: 'Vontade', value: 10, isFavorite: true },
-  ],
   combat: [
     {
       id: 'unarmed_soco', name: 'Soco', type: 'Contusão', damage: '1d3', currentAmmo: 0, maxAmmo: 0,
@@ -68,34 +76,10 @@ const initialCharacterTemplate: Omit<Character, 'id' | 'attributePoints' | 'skil
     },
   ],
   rituals: [],
-  inventory: [
-      { id: 'item_pistola', name: 'Pistola a Laser', width: 3, height: 1, x: 0, y: 0, weight: 1.5, description: 'Arma de energia compacta.', rotated: false },
-      { id: 'item_katana', name: 'Katana Monomolecular', width: 1, height: 4, x: 0, y: 1, weight: 1.2, description: 'Lâmina de alta frequência.', rotated: false },
-      { id: 'item_faca', name: 'Faca', width: 1, height: 2, x: 1, y: 5, weight: 0.5, description: 'Lâmina de combate padrão.', rotated: false },
-  ],
+  inventory: [],
   maskForm: null,
+  money: 1000,
 };
-
-const defaultMasterItemTemplates: MasterItemTemplate[] = [
-    { name: 'Pistola a Laser', width: 3, height: 1, weight: 1.5, description: 'Arma de energia compacta.', weapon: { type: 'Energia', damage: '1d10', currentAmmo: 20, maxAmmo: 20, attacks: '1', range: 'Médio', malfunction: '98', area: '-' } },
-    { name: 'Katana Monomolecular', width: 1, height: 4, weight: 1.2, description: 'Lâmina de alta frequência.', weapon: { type: 'Corte Leve', damage: '1d8+1', currentAmmo: 0, maxAmmo: 0, attacks: '1', range: 'Toque', malfunction: '-', area: '-' } },
-    { name: 'Faca', width: 1, height: 2, weight: 0.5, description: 'Lâmina de combate padrão.', weapon: { type: 'Corte Leve', damage: '1d4', currentAmmo: 0, maxAmmo: 0, attacks: '1', range: 'Toque', malfunction: '-', area: '-' } },
-    { name: 'Escopeta Inteligente', width: 4, height: 2, weight: 4.0, description: 'Dispara projéteis que rastreiam alvos próximos.', weapon: { type: 'Dispersão', damage: '2d8', currentAmmo: 8, maxAmmo: 8, attacks: '1', range: 'Curto', malfunction: '96', area: 'Cone' } },
-    { name: 'Submetralhadora Compacta', width: 3, height: 2, weight: 2.5, description: 'Arma automática de alta cadência.', weapon: { type: 'Balística', damage: '1d8', currentAmmo: 30, maxAmmo: 30, attacks: '3/Rajada', range: 'Médio', malfunction: '97', area: '-' } },
-    { name: 'Kit Médico', width: 2, height: 2, weight: 1.0, description: 'Kit de primeiros socorros. Cura 1d10 de vida.' },
-    { name: 'Munição (Pistola)', width: 1, height: 1, weight: 0.3, description: 'Pente de munição para pistolas a laser.'},
-    { name: 'Mochila', width: 6, height: 10, weight: 3, description: 'Reduz o peso dos itens guardados nela em 50%.'},
-    { name: 'Mascara Misteriosa', width: 3, height: 3, weight: 1, description: 'Um artefato de poder desconhecido e perigoso.' },
-    { name: 'Baralho de Tarot', width: 2, height: 2, weight: 0.2, description: 'Canaliza poder arcano, concedendo ataques e habilidades.' },
-];
-
-const defaultMasterRitualTemplates: MasterRitualTemplate[] = [
-    { id: 'default_1', name: 'Fragmentado', description: 'Cria uma ilusão estilhaçada de uma área ou objeto, confundindo todos que a observam com imagens quebradas e distorcidas.', cost: '15 PE', execution: '1 Ação', range: 'Médio', duration: 'Concentração', invocationSign: 'fragmentado' },
-    { id: 'default_2', name: 'Caos', description: 'Libera uma onda de energia entrópica que embaralha os sentidos e pode causar efeitos aleatórios em alvos próximos.', cost: '20 PE', execution: '1 Ação', range: 'Curto', duration: '1d4 turnos', invocationSign: 'caos' },
-    { id: 'default_3', name: 'Al KAI', description: 'Conhecido como "O Primeiro Paranormal", este ritual ancestral canaliza energia pura, podendo fortalecer aliados ou enfraquecer barreiras dimensionais.', cost: 'Variável', execution: '1 Rodada', range: 'Longo', duration: 'Variável', invocationSign: 'alkai' },
-    { id: 'default_4', name: 'Selo da Morte', description: 'Marca um alvo com um presságio de morte, tornando-o vulnerável a danos e dificultando qualquer forma de cura.', cost: '25 PE', execution: '1 Ação', range: 'Longo', duration: 'Cena', invocationSign: 'morte' },
-    { id: 'default_5', name: 'Pacto de Sangue', description: 'Um ritual perigoso que usa a própria força vital para alimentar um poder, oferecendo grandes recompensas em troca de um sacrifício.', cost: 'Vida', execution: '1 Minuto', range: 'Pessoal', duration: 'Permanente', invocationSign: 'sangue' },
-];
 
 const maskFormsData: Record<MaskForm, { name: string; description: string; passive: string; weapon?: Omit<Weapon, 'id'>; rituals?: Omit<Ritual, 'id'>[] }> = {
     'Oni': {
@@ -164,107 +148,54 @@ const tarotCardRitualsData: Omit<Ritual, 'id' | 'isTarotRitual'>[] = [
     { name: 'O Sol', cost: '1 Ação', execution: 'Instantânea', range: 'Curto', duration: '1 turno', description: 'Cria um clarão de luz que pode cegar.' },
 ];
 
-const getCharacters = (): Character[] => {
-  try {
-    const data = localStorage.getItem(DB_KEY);
-    const characters: Character[] = data ? JSON.parse(data) : [];
-    return characters.map(char => {
-        if (char.attributePoints === undefined) char.attributePoints = 0;
-        if (char.skillPoints === undefined) char.skillPoints = 0;
-        if (char.maskForm === undefined) char.maskForm = null;
-        if (char.rituals === undefined) char.rituals = [];
-        char.combat = char.combat.map(w => ({ ...w, isMaskWeapon: !!w.isMaskWeapon, isTarotCard: !!w.isTarotCard, isUnarmed: !!w.isUnarmed, linkedItemId: w.linkedItemId }));
-        char.rituals = char.rituals.map(r => ({ ...r, isMaskRitual: !!r.isMaskRitual, isTarotRitual: !!r.isTarotRitual }));
-        return char;
-    });
-  } catch (error) {
-    console.error("Falha ao ler personagens do localStorage", error);
-    return [];
-  }
+// --- DATA HELPERS ---
+const exportDataAsJson = (data: any, filename: string) => {
+    try {
+        const jsonString = JSON.stringify(data, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    } catch (error) {
+        console.error("Falha ao exportar dados:", error);
+        alert("Ocorreu um erro ao tentar exportar os dados.");
+    }
 };
 
-const saveCharacters = (characters: Character[]): void => {
-  try {
-    localStorage.setItem(DB_KEY, JSON.stringify(characters));
-  } catch (error) {
-    console.error("Falha ao salvar personagens no localStorage", error);
-    if (error instanceof DOMException && error.name === 'QuotaExceededError') {
-      alert('ERRO: Não foi possível salvar. O armazenamento do navegador está cheio, provavelmente devido a imagens grandes. Tente remover algumas imagens de personagem.');
+// --- UTILITY HOOKS ---
+function useDebouncedCallback<A extends any[]>(
+  callback: (...args: A) => void,
+  wait: number
+) {
+  const argsRef = useRef<A>();
+  const timeout = useRef<ReturnType<typeof setTimeout>>();
+
+  function cleanup() {
+    if (timeout.current) {
+      clearTimeout(timeout.current);
     }
   }
-};
 
-const getCharacter = (id: string): Character | undefined => {
-  return getCharacters().find(c => c.id === id);
-};
+  useEffect(() => {
+    return cleanup;
+  }, []);
 
-const createCharacter = (): Character => {
-  const characters = getCharacters();
-  const newCharacter: Character = {
-    ...JSON.parse(JSON.stringify(initialCharacterTemplate)),
-    id: Date.now().toString(),
-    personalDetails: {
-      ...initialCharacterTemplate.personalDetails,
-      name: `Operativo #${(characters.length + 1).toString().padStart(3, '0')}`,
-    },
-    attributePoints: 20,
-    skillPoints: 250,
+  return function debouncedCallback(...args: A) {
+    argsRef.current = args;
+    cleanup();
+    timeout.current = setTimeout(() => {
+      if (argsRef.current) {
+        callback(...argsRef.current);
+      }
+    }, wait);
   };
-  characters.push(newCharacter);
-  saveCharacters(characters);
-  return newCharacter;
-};
+}
 
-const updateCharacter = (id: string, updatedCharacterData: Omit<Character, 'id'>): void => {
-  const characters = getCharacters();
-  const index = characters.findIndex(c => c.id === id);
-  if (index !== -1) {
-    characters[index] = { ...updatedCharacterData, id };
-    saveCharacters(characters);
-  }
-};
-
-const deleteCharacter = (id: string): void => {
-  let characters = getCharacters();
-  characters = characters.filter(c => c.id !== id);
-  saveCharacters(characters);
-};
-
-const getMasterItemTemplates = (): MasterItemTemplate[] => {
-    try {
-        const data = localStorage.getItem(MASTER_ITEMS_KEY);
-        return data ? JSON.parse(data) : defaultMasterItemTemplates;
-    } catch (error) {
-        console.error("Falha ao ler os itens de mestre do localStorage", error);
-        return defaultMasterItemTemplates;
-    }
-};
-
-const saveMasterItemTemplates = (templates: MasterItemTemplate[]): void => {
-    try {
-        localStorage.setItem(MASTER_ITEMS_KEY, JSON.stringify(templates));
-    } catch (error) {
-        console.error("Falha ao salvar os itens de mestre no localStorage", error);
-    }
-};
-
-const getMasterRitualTemplates = (): MasterRitualTemplate[] => {
-    try {
-        const data = localStorage.getItem(MASTER_RITUALS_KEY);
-        return data ? JSON.parse(data) : defaultMasterRitualTemplates;
-    } catch (error) {
-        console.error("Falha ao ler os rituais de mestre do localStorage", error);
-        return defaultMasterRitualTemplates;
-    }
-};
-
-const saveMasterRitualTemplates = (templates: MasterRitualTemplate[]): void => {
-    try {
-        localStorage.setItem(MASTER_RITUALS_KEY, JSON.stringify(templates));
-    } catch (error) {
-        console.error("Falha ao salvar os rituais de mestre no localStorage", error);
-    }
-};
 
 // --- IMAGE HELPERS ---
 const getCurrentImage = (character: Character): { url: string | null; isDying: boolean } => {
@@ -294,6 +225,8 @@ const LoginPage: React.FC<{ onLoginSuccess: () => void; }> = ({ onLoginSuccess }
 
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
+        // This is a simple, non-secure login.
+        // In a real app, this should be a call to a secure backend authentication endpoint.
         if (username === 'Felks' && password === 'exterminador1') {
             setError('');
             sessionStorage.setItem('isMasterLoggedIn', 'true');
@@ -573,36 +506,184 @@ const RitualEditorModal: React.FC<{
     );
 };
 
+const MasterAttributeModal: React.FC<{
+    attribute?: MasterAttributeTemplate;
+    onClose: () => void;
+    onSave: (attr: MasterAttributeTemplate) => void;
+}> = ({ attribute, onClose, onSave }) => {
+    const [editedAttr, setEditedAttr] = useState<MasterAttributeTemplate>(
+        attribute || { id: `attr_${Date.now()}`, name: '', description: '' }
+    );
+
+    const handleChange = (field: keyof Omit<MasterAttributeTemplate, 'id'>, value: string) => {
+        setEditedAttr(prev => ({...prev, [field]: value}));
+    };
+    
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSave(editedAttr);
+        onClose();
+    };
+
+    return (
+         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+            <form onSubmit={handleSubmit} className="bg-black border border-gray-700 w-full max-w-lg p-6 shadow-2xl shadow-black">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl uppercase tracking-widest">{attribute ? 'Editar Atributo' : 'Novo Atributo'}</h2>
+                    <button type="button" onClick={onClose} className="text-2xl text-gray-500 hover:text-white">&times;</button>
+                </div>
+                <div className="space-y-4">
+                    <input type="text" placeholder="Nome do Atributo" value={editedAttr.name} onChange={e => handleChange('name', e.target.value)} className="w-full bg-black/50 border border-gray-600 p-2 text-gray-200" required />
+                    <textarea placeholder="Descrição" value={editedAttr.description} onChange={e => handleChange('description', e.target.value)} className="w-full bg-black/50 border border-gray-600 p-2 text-gray-200 h-24 resize-none" />
+                </div>
+                <div className="mt-6 pt-4 border-t border-gray-700 text-right">
+                    <button type="submit" className="border border-gray-600 hover:bg-gray-800 p-3 text-lg transition-all uppercase text-gray-200 px-8">Salvar</button>
+                </div>
+            </form>
+        </div>
+    )
+}
+
+const MasterSkillModal: React.FC<{
+    skill?: MasterSkillTemplate;
+    onClose: () => void;
+    onSave: (skill: MasterSkillTemplate) => void;
+}> = ({ skill, onClose, onSave }) => {
+     const [editedSkill, setEditedSkill] = useState<MasterSkillTemplate>(
+        skill || { id: `skill_${Date.now()}`, name: '', description: '' }
+    );
+
+    const handleChange = (field: keyof Omit<MasterSkillTemplate, 'id'>, value: string) => {
+        setEditedSkill(prev => ({...prev, [field]: value}));
+    };
+    
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSave(editedSkill);
+        onClose();
+    };
+
+    return (
+         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+            <form onSubmit={handleSubmit} className="bg-black border border-gray-700 w-full max-w-lg p-6 shadow-2xl shadow-black">
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl uppercase tracking-widest">{skill ? 'Editar Perícia' : 'Nova Perícia'}</h2>
+                    <button type="button" onClick={onClose} className="text-2xl text-gray-500 hover:text-white">&times;</button>
+                </div>
+                <div className="space-y-4">
+                    <input type="text" placeholder="Nome da Perícia" value={editedSkill.name} onChange={e => handleChange('name', e.target.value)} className="w-full bg-black/50 border border-gray-600 p-2 text-gray-200" required />
+                    <textarea placeholder="Descrição" value={editedSkill.description} onChange={e => handleChange('description', e.target.value)} className="w-full bg-black/50 border border-gray-600 p-2 text-gray-200 h-24 resize-none" />
+                </div>
+                <div className="mt-6 pt-4 border-t border-gray-700 text-right">
+                    <button type="submit" className="border border-gray-600 hover:bg-gray-800 p-3 text-lg transition-all uppercase text-gray-200 px-8">Salvar</button>
+                </div>
+            </form>
+        </div>
+    )
+}
+
 const DashboardPage: React.FC<{ onNavigate: (path: string) => void; onLogout: () => void; }> = ({ onNavigate, onLogout }) => {
     const [characters, setCharacters] = useState<Character[]>([]);
     const [masterItems, setMasterItems] = useState<MasterItemTemplate[]>([]);
     const [masterRituals, setMasterRituals] = useState<MasterRitualTemplate[]>([]);
+    const [masterAttributes, setMasterAttributes] = useState<MasterAttributeTemplate[]>([]);
+    const [masterSkills, setMasterSkills] = useState<MasterSkillTemplate[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
     
     const [copiedInfo, setCopiedInfo] = useState<{ id: string, type: 'sheet' | 'portrait' } | null>(null);
     const [grantingPointsFor, setGrantingPointsFor] = useState<Character | null>(null);
     const [creatingItem, setCreatingItem] = useState(false);
     const [dropTargetId, setDropTargetId] = useState<string | null>(null);
-    const [activeSidebarTab, setActiveSidebarTab] = useState<'items' | 'rituals'>('items');
+    const [activeSidebarTab, setActiveSidebarTab] = useState<'items' | 'rituals' | 'attributes' | 'skills'>('items');
     
     const [viewingRitual, setViewingRitual] = useState<MasterRitualTemplate | null>(null);
     const [editingRitual, setEditingRitual] = useState<MasterRitualTemplate | undefined>(undefined);
+    const [editingAttribute, setEditingAttribute] = useState<MasterAttributeTemplate | undefined>(undefined);
+    const [editingSkill, setEditingSkill] = useState<MasterSkillTemplate | undefined>(undefined);
 
+    const fileImportRef = useRef<HTMLInputElement>(null);
+    const [importType, setImportType] = useState<'character' | 'items' | 'rituals' | 'attributes' | 'skills' | null>(null);
 
-    useEffect(() => {
-        setCharacters(getCharacters());
-        setMasterItems(getMasterItemTemplates());
-        setMasterRituals(getMasterRitualTemplates());
-    }, []);
-
-    const handleCreateCharacter = () => {
-        const newChar = createCharacter();
-        onNavigate(`#/character/${newChar.id}`);
+    const handleDragStart = (e: React.DragEvent, item: MasterItemTemplate) => {
+        const itemPayload: Omit<InventoryItem, 'id' | 'x' | 'y' | 'rotated' | 'containerId'> = {
+            name: item.name,
+            width: item.width,
+            height: item.height,
+            weight: item.weight,
+            description: item.description,
+        };
+        e.dataTransfer.setData('application/json', JSON.stringify(itemPayload));
     };
 
-    const handleDeleteCharacter = (id: string, name: string) => {
+    useEffect(() => {
+        const fetchAllData = async () => {
+            try {
+                setIsLoading(true);
+                const [
+                    charsRes,
+                    itemsRes,
+                    ritualsRes,
+                    attrsRes,
+                    skillsRes
+                ] = await Promise.all([
+                    getCharacters(),
+                    getMasterItemTemplates(),
+                    getMasterRitualTemplates(),
+                    getMasterAttributes(),
+                    getMasterSkills(),
+                ]);
+                setCharacters(charsRes.data);
+                setMasterItems(itemsRes.data);
+                setMasterRituals(ritualsRes.data);
+                setMasterAttributes(attrsRes.data);
+                setMasterSkills(skillsRes.data);
+            } catch (error) {
+                console.error("Falha ao buscar dados do mestre:", error);
+                alert("Não foi possível carregar os dados do servidor. Verifique a conexão com o backend.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchAllData();
+    }, []);
+
+    const handleCreateCharacter = async () => {
+        const newCharacterData: Omit<Character, 'id'> = {
+            ...JSON.parse(JSON.stringify(initialCharacterTemplate)),
+            personalDetails: {
+                ...initialCharacterTemplate.personalDetails,
+                name: `Operativo #${(characters.length + 1).toString().padStart(3, '0')}`,
+            },
+            attributes: masterAttributes.map(attr => ({
+                id: attr.id, name: attr.name, value: 10,
+            })),
+            skills: masterSkills.map(skill => ({
+                id: skill.id, name: skill.name, value: 10, isFavorite: false,
+            })),
+            attributePoints: 0,
+            skillPoints: 0,
+        };
+        
+        try {
+            const response = await createCharacter(newCharacterData);
+            const newChar = response.data;
+            setCharacters(prev => [...prev, newChar]);
+            onNavigate(`#/character/${newChar.id}`);
+        } catch (error) {
+            console.error("Falha ao criar personagem:", error);
+            alert("Erro ao criar novo personagem.");
+        }
+    };
+
+    const handleDeleteCharacter = async (id: string, name: string) => {
         if (window.confirm(`Você tem certeza que deseja apagar o arquivo de "${name}"? Esta ação é irreversível.`)) {
-            deleteCharacter(id);
-            setCharacters(prevCharacters => prevCharacters.filter(char => char.id !== id));
+            try {
+                await deleteCharacter(id);
+                setCharacters(prev => prev.filter(char => char.id !== id));
+            } catch (error) {
+                console.error("Falha ao excluir personagem:", error);
+                alert("Erro ao excluir personagem.");
+            }
         }
     };
     
@@ -618,21 +699,43 @@ const DashboardPage: React.FC<{ onNavigate: (path: string) => void; onLogout: ()
         });
     };
     
-    const handleGrantPoints = (charId: string, attrPoints: number, skillPoints: number) => {
-        const currentCharacters = getCharacters();
-        const charIndex = currentCharacters.findIndex(c => c.id === charId);
-        if (charIndex !== -1) {
-            currentCharacters[charIndex].attributePoints += attrPoints;
-            currentCharacters[charIndex].skillPoints += skillPoints;
-            saveCharacters(currentCharacters);
-            setCharacters(currentCharacters); // Refresh dashboard state
+    const handleGrantPoints = async (charId: string, attrPoints: number, skillPoints: number) => {
+        const character = characters.find(c => c.id === charId);
+        if (!character) return;
+
+        const updatedCharacter = {
+            ...character,
+            attributePoints: character.attributePoints + attrPoints,
+            skillPoints: character.skillPoints + skillPoints,
+        };
+        const { id, ...charData } = updatedCharacter;
+        
+        try {
+            await updateCharacter(id, charData);
+            setCharacters(prev => prev.map(c => c.id === id ? updatedCharacter : c));
+        } catch (error) {
+            console.error("Falha ao conceder pontos:", error);
+            alert("Erro ao salvar a concessão de pontos.");
+        }
+    };
+
+    const handleSaveMasterData = async <T,>(
+        data: T[],
+        setter: React.Dispatch<React.SetStateAction<T[]>>,
+        saveFn: (data: T[]) => Promise<any>
+    ) => {
+        try {
+            await saveFn(data);
+            setter(data);
+        } catch (error) {
+            console.error("Falha ao salvar dados de mestre:", error);
+            alert("Erro ao salvar dados de mestre. As alterações podem não ter sido persistidas.");
         }
     };
 
     const handleSaveNewMasterItem = (newItem: MasterItemTemplate) => {
         const updatedItems = [...masterItems, newItem];
-        setMasterItems(updatedItems);
-        saveMasterItemTemplates(updatedItems);
+        handleSaveMasterData(updatedItems, setMasterItems, saveMasterItemTemplates);
     };
 
     const handleSaveRitual = (ritualToSave: MasterRitualTemplate) => {
@@ -643,35 +746,54 @@ const DashboardPage: React.FC<{ onNavigate: (path: string) => void; onLogout: ()
         } else {
             updatedRituals = [...masterRituals, ritualToSave];
         }
-        setMasterRituals(updatedRituals);
-        saveMasterRitualTemplates(updatedRituals);
+        handleSaveMasterData(updatedRituals, setMasterRituals, saveMasterRitualTemplates);
         setEditingRitual(undefined);
     };
 
-    const handleDragStart = (e: React.DragEvent, itemTemplate: MasterItemTemplate) => {
-        const invItem: Omit<InventoryItem, 'id' | 'x' | 'y' | 'rotated' | 'containerId'> = {
-            name: itemTemplate.name,
-            width: itemTemplate.width,
-            height: itemTemplate.height,
-            weight: itemTemplate.weight,
-            description: itemTemplate.description,
-        };
-        e.dataTransfer.setData('application/json', JSON.stringify(invItem));
+    const handleSaveMasterAttribute = (attrToSave: MasterAttributeTemplate) => {
+        const existingIndex = masterAttributes.findIndex(a => a.id === attrToSave.id);
+        const updatedAttributes = existingIndex > -1
+            ? masterAttributes.map(a => a.id === attrToSave.id ? attrToSave : a)
+            : [...masterAttributes, attrToSave];
+        
+        // Note: Logic to update all character sheets should now be handled by the backend.
+        // We just save the master list here.
+        handleSaveMasterData(updatedAttributes, setMasterAttributes, saveMasterAttributes);
+        setEditingAttribute(undefined);
     };
 
-    const handleDrop = (e: React.DragEvent, characterId: string) => {
+    const handleDeleteMasterAttribute = (attrToDelete: MasterAttributeTemplate) => {
+        if (!window.confirm(`Tem certeza que deseja apagar o atributo "${attrToDelete.name}"? O backend deve lidar com a remoção das fichas.`)) return;
+        const updatedAttributes = masterAttributes.filter(a => a.id !== attrToDelete.id);
+        handleSaveMasterData(updatedAttributes, setMasterAttributes, saveMasterAttributes);
+    };
+    
+    const handleSaveMasterSkill = (skillToSave: MasterSkillTemplate) => {
+        const existingIndex = masterSkills.findIndex(s => s.id === skillToSave.id);
+        const updatedSkills = existingIndex > -1
+            ? masterSkills.map(s => s.id === skillToSave.id ? skillToSave : s)
+            : [...masterSkills, skillToSave];
+
+        handleSaveMasterData(updatedSkills, setMasterSkills, saveMasterSkills);
+        setEditingSkill(undefined);
+    };
+    
+    const handleDeleteMasterSkill = (skillToDelete: MasterSkillTemplate) => {
+        if (!window.confirm(`Tem certeza que deseja apagar a perícia "${skillToDelete.name}"? O backend deve lidar com a remoção das fichas.`)) return;
+        const updatedSkills = masterSkills.filter(s => s.id !== skillToDelete.id);
+        handleSaveMasterData(updatedSkills, setMasterSkills, saveMasterSkills);
+    };
+
+    const handleDrop = async (e: React.DragEvent, characterId: string) => {
         e.preventDefault();
         setDropTargetId(null);
+        
+        const character = characters.find(c => c.id === characterId);
+        if(!character) return;
 
         try {
             const itemTemplate: Omit<InventoryItem, 'id' | 'x' | 'y' | 'rotated' | 'containerId'> = JSON.parse(e.dataTransfer.getData('application/json'));
-            const allChars = getCharacters();
-            const charIndex = allChars.findIndex(c => c.id === characterId);
-
-            if (charIndex === -1) return;
-
-            const targetCharacter = allChars[charIndex];
-            const { inventory } = targetCharacter;
+            const { inventory } = character;
 
             const isGridOccupied = (x: number, y: number, width: number, height: number, items: InventoryItem[]): boolean => {
                 for (const item of items) {
@@ -686,17 +808,17 @@ const DashboardPage: React.FC<{ onNavigate: (path: string) => void; onLogout: ()
             };
 
             let foundSpot = false;
+            let newItem: InventoryItem | undefined;
             for (let yPos = 0; yPos <= 10 - itemTemplate.height; yPos++) {
                 for (let xPos = 0; xPos <= 10 - itemTemplate.width; xPos++) {
                     if (!isGridOccupied(xPos, yPos, itemTemplate.width, itemTemplate.height, inventory)) {
-                        const newItem: InventoryItem = {
+                        newItem = {
                             ...itemTemplate,
                             id: `master_${Date.now()}`,
                             x: xPos,
                             y: yPos,
                             rotated: false
                         };
-                        targetCharacter.inventory.push(newItem);
                         foundSpot = true;
                         break;
                     }
@@ -704,21 +826,84 @@ const DashboardPage: React.FC<{ onNavigate: (path: string) => void; onLogout: ()
                 if (foundSpot) break;
             }
 
-            if (foundSpot) {
-                allChars[charIndex] = targetCharacter;
-                saveCharacters(allChars);
-                setCharacters(allChars); // Refresh UI
+            if (foundSpot && newItem) {
+                const updatedCharacter = { ...character, inventory: [...character.inventory, newItem] };
+                const { id, ...charData } = updatedCharacter;
+                await updateCharacter(id, charData);
+                setCharacters(prev => prev.map(c => c.id === id ? updatedCharacter : c));
             } else {
-                alert(`Inventário de ${targetCharacter.personalDetails.name} está cheio.`);
+                alert(`Inventário de ${character.personalDetails.name} está cheio.`);
             }
 
         } catch (error) {
             console.error("Falha ao soltar o item:", error);
         }
     };
+    
+    // --- Import / Export ---
+    const triggerImport = (type: 'character' | 'items' | 'rituals' | 'attributes' | 'skills') => {
+        setImportType(type);
+        fileImportRef.current?.click();
+    };
+
+    const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file || !importType) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const text = e.target?.result;
+                if (typeof text !== 'string') throw new Error("O arquivo não pôde ser lido.");
+                const data = JSON.parse(text);
+
+                if (importType === 'character') {
+                     if (!data.id || !data.personalDetails || !data.attributes) {
+                        throw new Error("Arquivo JSON não parece ser uma ficha de personagem válida.");
+                    }
+                    const importedChar = data as Character;
+                    const existingChar = characters.find(c => c.id === importedChar.id);
+                    if (existingChar) {
+                        if (window.confirm(`Já existe um personagem com este ID (${existingChar.personalDetails.name}). Deseja sobrescrevê-lo?`)) {
+                            await updateCharacter(importedChar.id, importedChar);
+                            setCharacters(prev => prev.map(c => c.id === importedChar.id ? importedChar : c));
+                        }
+                    } else {
+                        await createCharacter(importedChar);
+                        setCharacters(prev => [...prev, importedChar]);
+                    }
+                    alert(`Personagem "${importedChar.personalDetails.name}" importado com sucesso!`);
+                } else if (importType === 'items') {
+                    await handleSaveMasterData(data, setMasterItems, saveMasterItemTemplates);
+                    alert(`${data.length} itens de mestre importados com sucesso!`);
+                } else if (importType === 'rituals') {
+                    await handleSaveMasterData(data, setMasterRituals, saveMasterRitualTemplates);
+                    alert(`${data.length} rituais de mestre importados com sucesso!`);
+                } else if (importType === 'attributes') {
+                    await handleSaveMasterData(data, setMasterAttributes, saveMasterAttributes);
+                    alert(`${data.length} atributos de mestre importados! O backend deve sincronizar as fichas.`);
+                } else if (importType === 'skills') {
+                    await handleSaveMasterData(data, setMasterSkills, saveMasterSkills);
+                    alert(`${data.length} perícias de mestre importadas! O backend deve sincronizar as fichas.`);
+                }
+            } catch (error) {
+                console.error("Falha na importação:", error);
+                alert(`Erro ao importar arquivo: ${error instanceof Error ? error.message : 'Formato inválido.'}`);
+            } finally {
+                if(event.target) event.target.value = '';
+                setImportType(null);
+            }
+        };
+        reader.readAsText(file);
+    };
+    
+    if (isLoading) {
+        return <div className="flex items-center justify-center min-h-screen">CONECTANDO AO SERVIDOR...</div>;
+    }
 
     return (
         <div className="text-gray-200 min-h-screen p-4 md:p-8">
+            <input type="file" ref={fileImportRef} onChange={handleFileImport} className="hidden" accept=".json,application/json" />
             <header className="flex flex-col sm:flex-row justify-between items-center mb-8">
                 <div className="flex items-center gap-4">
                     <LogoIcon />
@@ -736,9 +921,14 @@ const DashboardPage: React.FC<{ onNavigate: (path: string) => void; onLogout: ()
                 <main className="xl:col-span-3">
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-2xl uppercase tracking-wider">Arquivos de Operativos</h2>
-                        <button onClick={handleCreateCharacter} className="border border-gray-700 text-gray-200 hover:bg-gray-800 px-4 py-2 text-sm transition-colors uppercase">
-                            + Novo Arquivo
-                        </button>
+                         <div className="flex gap-2">
+                            <button onClick={() => triggerImport('character')} className="border border-gray-700 text-gray-200 hover:bg-gray-800 px-4 py-2 text-sm transition-colors uppercase">
+                                Importar Arquivo
+                            </button>
+                            <button onClick={handleCreateCharacter} className="border border-gray-700 text-gray-200 hover:bg-gray-800 px-4 py-2 text-sm transition-colors uppercase">
+                                + Novo Arquivo
+                            </button>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -785,6 +975,11 @@ const DashboardPage: React.FC<{ onNavigate: (path: string) => void; onLogout: ()
                                                     <div className="flex-grow"><MiniStatBar current={char.stats.occultism.current} max={char.stats.occultism.max} color="bg-fuchsia-500" /></div>
                                                     <span className="w-16 text-right text-gray-300">{char.stats.occultism.current}/{char.stats.occultism.max}</span>
                                                 </div>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="w-20 text-gray-400 flex-shrink-0">ESFORÇO:</span>
+                                                    <div className="flex-grow"><MiniStatBar current={char.stats.effort.current} max={char.stats.effort.max} color="bg-gray-400" /></div>
+                                                    <span className="w-16 text-right text-gray-300">{char.stats.effort.current}/{char.stats.effort.max}</span>
+                                                </div>
                                             </div>
                                             
                                             <div className="mt-2">
@@ -802,7 +997,8 @@ const DashboardPage: React.FC<{ onNavigate: (path: string) => void; onLogout: ()
 
                                             <div className="mt-3 pt-3 border-t border-gray-800 flex flex-wrap gap-2 items-center">
                                                 <button onClick={() => onNavigate(`#/character/${char.id}`)} className="border border-gray-600 text-gray-300 hover:bg-gray-800 px-3 py-1 text-xs transition-colors">ABRIR</button>
-                                                <button onClick={() => setGrantingPointsFor(char)} className="border border-gray-600 text-gray-300 hover:bg-gray-800 px-3 py-1 text-xs transition-colors">CONCEDER PONTOS</button>
+                                                <button onClick={() => setGrantingPointsFor(char)} className="border border-gray-600 text-gray-300 hover:bg-gray-800 px-3 py-1 text-xs transition-colors">PONTOS</button>
+                                                <button onClick={() => exportDataAsJson(char, `operative_${char.personalDetails.name.replace(/\s/g, '_')}.json`)} className="border border-gray-600 text-gray-300 hover:bg-gray-800 px-3 py-1 text-xs transition-colors">EXPORTAR</button>
                                                 <button onClick={() => handleCopyLink(char.id, 'sheet')} className={`border border-gray-600 hover:bg-gray-800 px-3 py-1 text-xs transition-colors w-24 ${copiedInfo?.id === char.id && copiedInfo.type === 'sheet' ? 'text-white font-bold' : 'text-gray-300'}`}>{copiedInfo?.id === char.id && copiedInfo.type === 'sheet' ? 'COPIADO!' : 'COPIAR LINK'}</button>
                                                 <button onClick={() => handleCopyLink(char.id, 'portrait')} className={`border border-gray-600 hover:bg-gray-800 px-3 py-1 text-xs transition-colors w-32 ${copiedInfo?.id === char.id && copiedInfo.type === 'portrait' ? 'text-white font-bold' : 'text-gray-300'}`}>{copiedInfo?.id === char.id && copiedInfo.type === 'portrait' ? 'COPIADO!' : 'COPIAR RETRATO'}</button>
                                                 <button onClick={() => handleDeleteCharacter(char.id, char.personalDetails.name)} className="border border-gray-600 text-gray-300 hover:text-red-400 hover:border-red-500 hover:bg-red-900/50 px-3 py-1 text-xs transition-colors">EXCLUIR</button>
@@ -812,32 +1008,28 @@ const DashboardPage: React.FC<{ onNavigate: (path: string) => void; onLogout: ()
                                 )
                             })
                         ) : (
-                            <p className="text-center text-gray-600 p-8 col-span-full">NENHUM ARQUIVO DE OPERATIVO ENCONTRADO NO ARQUIVO.</p>
+                            <p className="text-center text-gray-600 p-8 col-span-full">NENHUM ARQUIVO DE OPERATIVO ENCONTRADO. CRIE UM NOVO OU IMPORTE UM ARQUIVO.</p>
                         )}
                     </div>
                 </main>
                 <aside className="xl:col-span-1">
                     <div className="sticky top-8 bg-black/70 backdrop-blur-sm border border-gray-700 p-4">
                         <div className="flex border-b border-gray-700 mb-4">
-                            <button 
-                                onClick={() => setActiveSidebarTab('items')}
-                                className={`flex-1 p-2 text-center uppercase tracking-wider transition-colors ${activeSidebarTab === 'items' ? 'text-white bg-gray-800/50' : 'text-gray-500 hover:bg-gray-800/30'}`}
-                            >
-                                Depósito
-                            </button>
-                            <button
-                                onClick={() => setActiveSidebarTab('rituals')}
-                                className={`flex-1 p-2 text-center uppercase tracking-wider transition-colors ${activeSidebarTab === 'rituals' ? 'text-white bg-gray-800/50' : 'text-gray-500 hover:bg-gray-800/30'}`}
-                            >
-                                Grimório
-                            </button>
+                            <button onClick={() => setActiveSidebarTab('items')} className={`flex-1 p-2 text-center uppercase tracking-wider transition-colors text-xs ${activeSidebarTab === 'items' ? 'text-white bg-gray-800/50' : 'text-gray-500 hover:bg-gray-800/30'}`}>Depósito</button>
+                            <button onClick={() => setActiveSidebarTab('rituals')} className={`flex-1 p-2 text-center uppercase tracking-wider transition-colors text-xs ${activeSidebarTab === 'rituals' ? 'text-white bg-gray-800/50' : 'text-gray-500 hover:bg-gray-800/30'}`}>Grimório</button>
+                            <button onClick={() => setActiveSidebarTab('attributes')} className={`flex-1 p-2 text-center uppercase tracking-wider transition-colors text-xs ${activeSidebarTab === 'attributes' ? 'text-white bg-gray-800/50' : 'text-gray-500 hover:bg-gray-800/30'}`}>Atributos</button>
+                            <button onClick={() => setActiveSidebarTab('skills')} className={`flex-1 p-2 text-center uppercase tracking-wider transition-colors text-xs ${activeSidebarTab === 'skills' ? 'text-white bg-gray-800/50' : 'text-gray-500 hover:bg-gray-800/30'}`}>Perícias</button>
                         </div>
 
                         {activeSidebarTab === 'items' && (
                             <div>
                                 <div className="flex justify-between items-center mb-4">
-                                    <h2 className="text-2xl uppercase tracking-wider">Itens</h2>
-                                    <button onClick={() => setCreatingItem(true)} className="border border-gray-600 hover:bg-gray-800 px-3 py-1 text-xs transition-colors">+</button>
+                                    <h2 className="text-xl uppercase tracking-wider">Itens</h2>
+                                    <div className="flex items-center gap-2">
+                                        <button onClick={() => triggerImport('items')} className="border border-gray-600 hover:bg-gray-800 px-3 py-1 text-xs transition-colors">Importar</button>
+                                        <button onClick={() => exportDataAsJson(masterItems, 'cyberghost_master_items.json')} className="border border-gray-600 hover:bg-gray-800 px-3 py-1 text-xs transition-colors">Exportar</button>
+                                        <button onClick={() => setCreatingItem(true)} className="border border-gray-600 hover:bg-gray-800 px-2 py-0.5 text-md transition-colors leading-none">+</button>
+                                    </div>
                                 </div>
                                 <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
                                    {masterItems.map((item, index) => (
@@ -858,8 +1050,12 @@ const DashboardPage: React.FC<{ onNavigate: (path: string) => void; onLogout: ()
                         {activeSidebarTab === 'rituals' && (
                              <div>
                                 <div className="flex justify-between items-center mb-4">
-                                     <h2 className="text-2xl uppercase tracking-wider">Rituais</h2>
-                                     <button onClick={() => setEditingRitual({ id: '', name: '', description: '', cost: '', execution: '', range: '', duration: '', invocationSign: 'fragmentado' })} className="border border-gray-600 hover:bg-gray-800 px-3 py-1 text-xs transition-colors">+</button>
+                                     <h2 className="text-xl uppercase tracking-wider">Rituais</h2>
+                                     <div className="flex items-center gap-2">
+                                        <button onClick={() => triggerImport('rituals')} className="border border-gray-600 hover:bg-gray-800 px-3 py-1 text-xs transition-colors">Importar</button>
+                                        <button onClick={() => exportDataAsJson(masterRituals, 'cyberghost_master_rituals.json')} className="border border-gray-600 hover:bg-gray-800 px-3 py-1 text-xs transition-colors">Exportar</button>
+                                        <button onClick={() => setEditingRitual({ id: '', name: '', description: '', cost: '', execution: '', range: '', duration: '', invocationSign: 'fragmentado' })} className="border border-gray-600 hover:bg-gray-800 px-2 py-0.5 text-md transition-colors leading-none">+</button>
+                                    </div>
                                  </div>
                                  <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
                                     {masterRituals.map((ritual) => (
@@ -874,6 +1070,60 @@ const DashboardPage: React.FC<{ onNavigate: (path: string) => void; onLogout: ()
                                             <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button onClick={() => setViewingRitual(ritual)} className="text-xs border border-gray-600 px-2 py-0.5 hover:bg-gray-800">Ver</button>
                                                 <button onClick={() => setEditingRitual(ritual)} className="text-xs border border-gray-600 px-2 py-0.5 hover:bg-gray-800">Editar</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                 </div>
+                            </div>
+                        )}
+
+                        {activeSidebarTab === 'attributes' && (
+                             <div>
+                                <div className="flex justify-between items-center mb-4">
+                                     <h2 className="text-xl uppercase tracking-wider">Atributos</h2>
+                                     <div className="flex items-center gap-2">
+                                        <button onClick={() => triggerImport('attributes')} className="border border-gray-600 hover:bg-gray-800 px-3 py-1 text-xs transition-colors">Importar</button>
+                                        <button onClick={() => exportDataAsJson(masterAttributes, 'cyberghost_master_attributes.json')} className="border border-gray-600 hover:bg-gray-800 px-3 py-1 text-xs transition-colors">Exportar</button>
+                                        <button onClick={() => setEditingAttribute({ id: '', name: '', description: '' })} className="border border-gray-600 hover:bg-gray-800 px-2 py-0.5 text-md transition-colors leading-none">+</button>
+                                    </div>
+                                 </div>
+                                 <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
+                                    {masterAttributes.map((attr) => (
+                                        <div key={attr.id} className="border border-gray-700 bg-gray-900/50 p-3 flex gap-4 items-center group">
+                                            <div className="flex-grow">
+                                                <p className="font-bold text-gray-200 text-lg">{attr.name}</p>
+                                                <p className="text-xs text-gray-400">{attr.description}</p>
+                                            </div>
+                                            <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => setEditingAttribute(attr)} className="text-xs border border-gray-600 px-2 py-0.5 hover:bg-gray-800">Editar</button>
+                                                <button onClick={() => handleDeleteMasterAttribute(attr)} className="text-xs border border-gray-600 px-2 py-0.5 hover:bg-red-900/50 hover:text-red-400">Apagar</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                 </div>
+                            </div>
+                        )}
+
+                        {activeSidebarTab === 'skills' && (
+                             <div>
+                                <div className="flex justify-between items-center mb-4">
+                                     <h2 className="text-xl uppercase tracking-wider">Perícias</h2>
+                                     <div className="flex items-center gap-2">
+                                        <button onClick={() => triggerImport('skills')} className="border border-gray-600 hover:bg-gray-800 px-3 py-1 text-xs transition-colors">Importar</button>
+                                        <button onClick={() => exportDataAsJson(masterSkills, 'cyberghost_master_skills.json')} className="border border-gray-600 hover:bg-gray-800 px-3 py-1 text-xs transition-colors">Exportar</button>
+                                        <button onClick={() => setEditingSkill({ id: '', name: '', description: '' })} className="border border-gray-600 hover:bg-gray-800 px-2 py-0.5 text-md transition-colors leading-none">+</button>
+                                    </div>
+                                 </div>
+                                 <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">
+                                    {masterSkills.map((skill) => (
+                                        <div key={skill.id} className="border border-gray-700 bg-gray-900/50 p-3 flex gap-4 items-center group">
+                                            <div className="flex-grow">
+                                                <p className="font-bold text-gray-200 text-lg">{skill.name}</p>
+                                                <p className="text-xs text-gray-400">{skill.description}</p>
+                                            </div>
+                                            <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => setEditingSkill(skill)} className="text-xs border border-gray-600 px-2 py-0.5 hover:bg-gray-800">Editar</button>
+                                                <button onClick={() => handleDeleteMasterSkill(skill)} className="text-xs border border-gray-600 px-2 py-0.5 hover:bg-red-900/50 hover:text-red-400">Apagar</button>
                                             </div>
                                         </div>
                                     ))}
@@ -898,42 +1148,31 @@ const DashboardPage: React.FC<{ onNavigate: (path: string) => void; onLogout: ()
             )}
             {viewingRitual && <RitualDetailsModal ritual={viewingRitual} onClose={() => setViewingRitual(null)} />}
             {editingRitual !== undefined && <RitualEditorModal ritual={editingRitual.id ? editingRitual : undefined} onSave={handleSaveRitual} onClose={() => setEditingRitual(undefined)} />}
+            {editingAttribute !== undefined && <MasterAttributeModal attribute={editingAttribute.id ? editingAttribute : undefined} onSave={handleSaveMasterAttribute} onClose={() => setEditingAttribute(undefined)} />}
+            {editingSkill !== undefined && <MasterSkillModal skill={editingSkill.id ? editingSkill : undefined} onSave={handleSaveMasterSkill} onClose={() => setEditingSkill(undefined)} />}
         </div>
     );
 };
 
 // --- PORTRAIT MODE FOR STREAMING ---
-const PortraitStatBar: React.FC<{ label: string; stat: Stat; color: string; }> = ({ label, stat, color }) => {
-    const percentage = stat.max > 0 ? (stat.current / stat.max) * 100 : 0;
-    return (
-        <div className="mb-4">
-            <div className="flex justify-between items-baseline mb-1">
-                <h3 className="text-2xl uppercase tracking-wider">{label}</h3>
-                <span className="text-2xl font-bold">{stat.current} / {stat.max}</span>
-            </div>
-            <div className="w-full bg-black/60 border-2 border-gray-500/80 h-8 overflow-hidden">
-                <div className={`h-full transition-all duration-500 ease-linear ${color}`} style={{ width: `${percentage}%` }}></div>
-            </div>
-        </div>
-    );
-};
-
 const PortraitPage: React.FC<{ characterId: string }> = ({ characterId }) => {
     const [character, setCharacter] = useState<Character | null>(null);
 
-    // Poll localStorage for real-time updates
     useEffect(() => {
-        const interval = setInterval(() => {
-            const charData = getCharacter(characterId);
-            if (charData) {
-                setCharacter(prevChar => JSON.stringify(prevChar) !== JSON.stringify(charData) ? charData : prevChar);
+        const fetchCharacter = async () => {
+            try {
+                const response = await getCharacter(characterId);
+                setCharacter(response.data);
+            } catch (error) {
+                console.error(`Falha ao buscar personagem ${characterId} para o modo retrato`, error);
+                // Optionally show an error state in the portrait view
+                setCharacter(null);
             }
-        }, 1000);
+        };
 
-        const charData = getCharacter(characterId);
-        if (charData) setCharacter(charData);
-        else console.log("Personagem não encontrado");
-        
+        fetchCharacter(); // Initial fetch
+        const interval = setInterval(fetchCharacter, 2000); // Poll every 2 seconds
+
         document.body.classList.add('portrait-mode');
         return () => {
             clearInterval(interval);
@@ -942,27 +1181,32 @@ const PortraitPage: React.FC<{ characterId: string }> = ({ characterId }) => {
     }, [characterId]);
 
     if (!character) {
-        return <div className="flex items-center justify-center min-h-screen bg-transparent text-gray-200">CARREGANDO RETRATO...</div>;
+        return <div className="flex items-center justify-center w-[600px] h-[300px] bg-transparent text-gray-200">CARREGANDO RETRATO...</div>;
     }
     
     const { url: currentImageUrl, isDying } = getCurrentImage(character);
 
     return (
-        <div className="bg-transparent text-gray-200 p-4 w-[600px] h-[300px] flex gap-4">
-            <div className={`w-1/2 h-full flex-shrink-0 border-4 shadow-[0_0_15px_rgba(255,255,255,0.2)] bg-black transition-all ${isDying ? 'border-red-500/50' : 'border-gray-400/80'}`}>
+        <div className="w-[600px] h-[300px] flex text-gray-200">
+            {/* Left column: Image */}
+            <div className="w-1/3 h-full flex-shrink-0 bg-black">
                  {currentImageUrl ? (
                     <img src={currentImageUrl} alt={character.personalDetails.name} className={`w-full h-full object-cover transition-all ${isDying ? 'filter brightness-50' : ''}`} />
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-600 text-lg text-center">SEM IMAGEM</div>
+                    <div className="w-full h-full flex items-center justify-center text-gray-600 text-lg text-center bg-black">SEM IMAGEM</div>
                 )}
             </div>
-            <div className="w-1/2 h-full flex flex-col justify-between">
-                <h1 className="text-4xl text-center uppercase tracking-widest leading-tight text-shadow-lg">{character.personalDetails.name}</h1>
-                <div className="flex-grow flex flex-col justify-end">
-                    <PortraitStatBar label="Vitalidade" stat={character.stats.life} color="bg-green-500" />
-                    <PortraitStatBar label="Estabilidade" stat={character.stats.sanity} color="bg-cyan-500" />
-                    <PortraitStatBar label="Exposição" stat={character.stats.occultism} color="bg-fuchsia-500" />
-                </div>
+            {/* Right column: Stats */}
+            <div className="w-2/3 h-full flex flex-col items-center justify-center bg-black gap-2 p-2">
+                <p className="text-6xl font-bold text-red-400 text-shadow-lg">
+                    {character.stats.life.current}/{character.stats.life.max}
+                </p>
+                <p className="text-6xl font-bold text-sky-400 text-shadow-lg">
+                    {character.stats.sanity.current}/{character.stats.sanity.max}
+                </p>
+                <p className="text-6xl font-bold text-gray-300 text-shadow-lg">
+                    {character.stats.effort.current}/{character.stats.effort.max}
+                </p>
             </div>
         </div>
     );
@@ -1099,7 +1343,7 @@ const ImageManager: React.FC<{
 };
 
 const AttributeRollModal: React.FC<{ result: RollResult; onClose: () => void }> = ({ result, onClose }) => {
-    if (result.type !== 'attribute' || !result.outcome || result.targetValue === undefined) {
+    if ((result.type !== 'attribute' && result.type !== 'sanity') || !result.outcome || result.targetValue === undefined) {
         return null;
     }
 
@@ -1112,6 +1356,7 @@ const AttributeRollModal: React.FC<{ result: RollResult; onClose: () => void }> 
     };
 
     const colors = outcomeColors[result.outcome];
+    const iconValue = result.type === 'sanity' ? `d100: ${result.rollValue}` : result.rollValue;
 
     return (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-fade-in">
@@ -1119,7 +1364,7 @@ const AttributeRollModal: React.FC<{ result: RollResult; onClose: () => void }> 
                 <h2 className="text-2xl text-gray-400 uppercase tracking-widest">Teste de {result.source}</h2>
                 
                 <div className="my-8 flex justify-center items-center">
-                    <D20Icon value={result.rollValue} className="w-40 h-40 text-gray-200" />
+                    <D20Icon value={iconValue} className="w-40 h-40 text-gray-200" />
                 </div>
 
                 <h3 className={`text-4xl uppercase tracking-wider mb-2 ${colors.text}`}>{result.outcome}</h3>
@@ -1198,7 +1443,70 @@ const EditableField: React.FC<{ label: string; value: string; onSave: (value: st
   );
 };
 
-const StatusBar: React.FC<{ label: string; stat: Stat; onSave: (newStat: Stat) => void; color: string; labels: [string, string, string] }> = ({ label, stat, onSave, color, labels }) => {
+const EditableTextarea: React.FC<{ label: string; value: string; onSave: (value: string) => void; rows?: number }> = ({ label, value, onSave, rows = 3 }) => {
+    const [currentValue, setCurrentValue] = useState(value);
+    
+    useEffect(() => {
+        setCurrentValue(value);
+    }, [value]);
+
+    const handleSave = () => {
+        onSave(currentValue);
+    };
+
+    return (
+        <div className="flex flex-col mb-2">
+            <label className="text-gray-400 uppercase text-sm mb-1">{label}</label>
+            <textarea
+                value={currentValue}
+                onChange={(e) => setCurrentValue(e.target.value)}
+                onBlur={handleSave}
+                rows={rows}
+                className="bg-black/50 border border-gray-700/80 focus:border-gray-500 outline-none w-full text-gray-200 p-2 text-sm resize-none"
+            />
+        </div>
+    );
+};
+
+const EditableList: React.FC<{ title: string; items: { id: string; text: string }[]; onUpdate: (items: { id: string; text: string }[]) => void; }> = ({ title, items, onUpdate }) => {
+    const handleItemChange = (id: string, newText: string) => {
+        onUpdate(items.map(item => item.id === id ? { ...item, text: newText } : item));
+    };
+
+    const handleAddItem = () => {
+        onUpdate([...items, { id: Date.now().toString(), text: '' }]);
+    };
+
+    const handleRemoveItem = (id: string) => {
+        onUpdate(items.filter(item => item.id !== id));
+    };
+    
+    return (
+        <div>
+            <h3 className="text-gray-400 uppercase text-sm mb-2">{title}</h3>
+            <div className="space-y-2">
+                {items.map(item => (
+                    <div key={item.id} className="flex items-center gap-2">
+                        <input
+                            type="text"
+                            value={item.text}
+                            onChange={(e) => handleItemChange(item.id, e.target.value)}
+                            className="flex-grow bg-black/50 border border-transparent hover:border-gray-700 focus:border-gray-500 p-1 rounded-sm focus:outline-none text-sm"
+                            placeholder="Descreva..."
+                        />
+                        <button onClick={() => handleRemoveItem(item.id)} className="text-gray-500 hover:text-red-400 font-bold px-2 text-lg">&times;</button>
+                    </div>
+                ))}
+            </div>
+            <button onClick={handleAddItem} className="mt-2 text-xs border border-gray-600 hover:bg-gray-800 px-3 py-1 transition-colors">
+                + Adicionar
+            </button>
+        </div>
+    );
+};
+
+
+const StatusBar: React.FC<{ label: string; stat: Stat; onSave: (newStat: Stat) => void; color: string; labels: [string, string, string]; onTest?: () => void; }> = ({ label, stat, onSave, color, labels, onTest }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [current, setCurrent] = useState(stat.current);
     const [max, setMax] = useState(stat.max);
@@ -1225,7 +1533,14 @@ const StatusBar: React.FC<{ label: string; stat: Stat; onSave: (newStat: Stat) =
     return (
         <div className="mb-4">
             <div className="flex justify-between items-center mb-1">
-                <h3 className="text-lg uppercase text-gray-200">{label}</h3>
+                 <div className="flex items-baseline gap-3">
+                    <h3 className="text-lg uppercase text-gray-200">{label}</h3>
+                    {onTest && (
+                        <button onClick={onTest} className="text-cyan-400 border border-cyan-400/50 px-2 text-xs hover:bg-cyan-900/50 transition-colors rounded-sm">
+                            TESTE DE SANIDADE
+                        </button>
+                    )}
+                </div>
                 {isEditing ? (
                     <div className="flex items-center gap-2">
                         <input type="number" value={current} onChange={e => setCurrent(Number(e.target.value))} className="w-16 bg-black/50 border border-gray-700 text-center text-gray-200" />
@@ -1283,23 +1598,47 @@ const CharacterSheetPage: React.FC<{ characterId: string; onNavigate: (path: str
     const [isImageManagerOpen, setIsImageManagerOpen] = useState(false);
     const [rollHistory, setRollHistory] = useState<RollResult[]>([]);
     const [attributeRollResult, setAttributeRollResult] = useState<RollResult | null>(null);
+    const [masterItems, setMasterItems] = useState<MasterItemTemplate[]>([]);
+
+    const debouncedSave = useDebouncedCallback((charToSave: Character) => {
+        if(charToSave){
+            const { id, ...charData } = charToSave;
+            updateCharacter(id, charData).catch(err => {
+                console.error("Auto-save failed:", err);
+                // Optionally notify user of save failure
+            });
+        }
+    }, 1500);
 
     useEffect(() => {
-        const charData = getCharacter(characterId);
-        if (charData) {
-            setCharacter(charData);
-        } else {
-            onNavigate('#/dashboard');
-        }
+        let isMounted = true;
+        const fetchInitialData = async () => {
+            try {
+                const [charRes, itemsRes] = await Promise.all([
+                    getCharacter(characterId),
+                    getMasterItemTemplates()
+                ]);
+                if (isMounted) {
+                    setCharacter(charRes.data);
+                    setMasterItems(itemsRes.data);
+                }
+            } catch (error) {
+                console.error(`Falha ao buscar dados para o personagem ${characterId}`, error);
+                if (isMounted) {
+                    onNavigate('#/login'); // Or an error page
+                }
+            }
+        };
+        fetchInitialData();
+        return () => { isMounted = false; };
     }, [characterId, onNavigate]);
 
     // This effect saves the character on any change.
     useEffect(() => {
         if (character) {
-            const { id, ...charData } = character;
-            updateCharacter(id, charData);
+            debouncedSave(character);
         }
-    }, [character]);
+    }, [character, debouncedSave]);
 
     const handleCharacterUpdate = useCallback((updater: (char: Character) => Character) => {
         setCharacter(prev => (prev ? updater(prev) : null));
@@ -1309,14 +1648,12 @@ const CharacterSheetPage: React.FC<{ characterId: string; onNavigate: (path: str
     useEffect(() => {
         if (!character) return;
         
-        const masterTemplates = getMasterItemTemplates();
-
         let nextCombat = character.combat.filter(w => !w.isMaskWeapon && !w.isTarotCard && !w.linkedItemId);
         let nextRituals = character.rituals.filter(r => !r.isMaskRitual && !r.isTarotRitual);
         
         // --- Handle Linked Inventory Weapons ---
         character.inventory.forEach(item => {
-            const template = masterTemplates.find(t => t.name === item.name && t.weapon);
+            const template = masterItems.find(t => t.name === item.name && t.weapon);
             if (template && template.weapon) {
                 const existingWeapon = character.combat.find(w => w.linkedItemId === item.id);
                  if (!nextCombat.some(w => w.linkedItemId === item.id)) {
@@ -1379,7 +1716,7 @@ const CharacterSheetPage: React.FC<{ characterId: string; onNavigate: (path: str
             }));
         }
 
-    }, [character?.inventory, character?.maskForm, character?.stats.occultism.current, handleCharacterUpdate]);
+    }, [character, masterItems, handleCharacterUpdate]);
 
 
     const handleMaskClick = useCallback(() => {
@@ -1400,6 +1737,9 @@ const CharacterSheetPage: React.FC<{ characterId: string; onNavigate: (path: str
 
     const handleDetailChange = (field: keyof Character['personalDetails'], value: string) => 
         handleCharacterUpdate(c => ({ ...c, personalDetails: { ...c.personalDetails, [field]: value } }));
+
+    const handleBackgroundChange = (field: keyof Character['background'], value: any) =>
+        handleCharacterUpdate(c => ({ ...c, background: { ...c.background, [field]: value } }));
 
     const handleStatChange = (field: keyof Character['stats'], value: Stat) =>
         handleCharacterUpdate(c => ({ ...c, stats: { ...c.stats, [field]: value } }));
@@ -1452,16 +1792,36 @@ const CharacterSheetPage: React.FC<{ characterId: string; onNavigate: (path: str
         setAttributeRollResult(newRoll);
     };
 
+    const handleSanityRoll = () => {
+        if (!character) return;
+        const roll = Math.floor(Math.random() * 100) + 1;
+        const target = character.stats.sanity.current;
+        let outcome: RollOutcome;
 
-    const handleSkillChange = (id: string, field: 'name' | 'value', value: string | number) =>
+        if (roll <= 5) outcome = 'Sucesso Crítico';
+        else if (roll >= 96) outcome = 'Fracasso Crítico';
+        else if (roll <= target) outcome = 'Sucesso';
+        else outcome = 'Fracasso';
+        
+        const newRoll: RollResult = {
+            id: Date.now(),
+            type: 'sanity',
+            source: 'Sanidade',
+            rollValue: roll,
+            targetValue: target,
+            outcome: outcome,
+        };
+        setRollHistory(prev => [newRoll, ...prev.slice(0, 19)]);
+        setAttributeRollResult(newRoll);
+    };
+
+
+    const handleSkillChange = (id: string, value: number) =>
         handleCharacterUpdate(c => {
             const oldSkill = c.skills.find(skill => skill.id === id);
-            if (!oldSkill || field === 'name') {
-                 return { ...c, skills: c.skills.map(skill => skill.id === id ? { ...skill, [field]: value } : skill) };
-            }
-
-            const newValue = Number(value);
-            const cost = newValue - oldSkill.value;
+            if (!oldSkill) return c;
+            
+            const cost = value - oldSkill.value;
             
             if (cost > c.skillPoints) {
                 alert(`Pontos de perícia insuficientes! Necessário: ${cost}, Disponível: ${c.skillPoints}`);
@@ -1470,7 +1830,7 @@ const CharacterSheetPage: React.FC<{ characterId: string; onNavigate: (path: str
             
             return {
                 ...c,
-                skills: c.skills.map(skill => skill.id === id ? { ...skill, value: newValue } : skill),
+                skills: c.skills.map(skill => skill.id === id ? { ...skill, value } : skill),
                 skillPoints: c.skillPoints - cost,
             };
         });
@@ -1480,32 +1840,6 @@ const CharacterSheetPage: React.FC<{ characterId: string; onNavigate: (path: str
             ...c,
             skills: c.skills.map(skill => skill.id === id ? { ...skill, isFavorite: !skill.isFavorite } : skill)
         }));
-
-    const addSkill = () =>
-        handleCharacterUpdate(c => {
-            const newSkillCost = 10;
-            if (c.skillPoints < newSkillCost) {
-                alert(`Pontos de perícia insuficientes para adicionar uma nova perícia! Necessário: ${newSkillCost}, Disponível: ${c.skillPoints}`);
-                return c;
-            }
-            return {
-                ...c,
-                skills: [...c.skills, { id: Date.now().toString(), name: 'Nova Perícia', value: newSkillCost, isFavorite: false }],
-                skillPoints: c.skillPoints - newSkillCost
-            };
-        });
-
-    const removeSkill = (id: string) =>
-        handleCharacterUpdate(c => {
-            const skillToRemove = c.skills.find(s => s.id === id);
-            if (!skillToRemove) return c;
-            
-            return {
-                ...c,
-                skills: c.skills.filter(skill => skill.id !== id),
-                skillPoints: c.skillPoints + skillToRemove.value
-            };
-        });
 
     const handleCombatChange = (index: number, field: keyof Weapon, value: string | number) => 
         handleCharacterUpdate(c => {
@@ -1567,7 +1901,7 @@ const CharacterSheetPage: React.FC<{ characterId: string; onNavigate: (path: str
     }, [character]);
 
     if (!character) {
-        return <div className="flex items-center justify-center min-h-screen">CARREGANDO ARQUIVO...</div>;
+        return <div className="flex items-center justify-center min-h-screen">CARREGANDO ARQUIVO DO SERVIDOR...</div>;
     }
     
     const favoriteSkills = character.skills.filter(s => s.isFavorite);
@@ -1586,12 +1920,19 @@ const CharacterSheetPage: React.FC<{ characterId: string; onNavigate: (path: str
                         </button>
                     )}
                 </div>
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center text-center">
                     <LogoIcon />
                     <h1 className="text-4xl uppercase tracking-[0.2em] mt-2">Perfil do Operativo</h1>
                     <p className="text-sm text-gray-500">//ARSENAL.LOG</p>
                 </div>
-                <div className="flex-1"></div>
+                <div className="flex-1 flex justify-end">
+                     <button 
+                        onClick={() => exportDataAsJson(character, `operative_${character.personalDetails.name.replace(/\s/g, '_')}.json`)} 
+                        className="border border-gray-600 hover:bg-gray-800 px-4 py-2 text-sm transition-colors"
+                    >
+                        EXPORTAR FICHA
+                    </button>
+                </div>
             </header>
             
             <main className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -1610,7 +1951,7 @@ const CharacterSheetPage: React.FC<{ characterId: string; onNavigate: (path: str
                     <Section title={`ATRIBUTOS (${character.attributePoints} PONTOS)`}>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-6 mb-6">
                             {character.attributes.map((attr, index) => (
-                                <div key={attr.name} className="text-center">
+                                <div key={attr.id} className="text-center">
                                     <div className="flex justify-center items-center">
                                         <button
                                             onClick={() => handleAttributeRoll(attr)}
@@ -1673,27 +2014,25 @@ const CharacterSheetPage: React.FC<{ characterId: string; onNavigate: (path: str
                     <Section title={`LISTA DE PERÍCIAS (${character.skillPoints} PONTOS)`}>
                         <div className="space-y-2">
                             {character.skills.map((skill) => (
-                                <div key={skill.id} className="flex items-center gap-2">
+                                <div key={skill.id} className="flex items-center gap-2 group">
                                     <button onClick={() => toggleSkillFavorite(skill.id)} className="text-lg" aria-label="Marcar como favorita">
                                         {skill.isFavorite ? '★' : '☆'}
                                     </button>
                                     <input 
                                         type="text" 
                                         value={skill.name} 
-                                        onChange={(e) => handleSkillChange(skill.id, 'name', e.target.value)}
-                                        className="flex-grow bg-black/50 border border-transparent hover:border-gray-700 focus:border-gray-500 p-1 rounded-sm focus:outline-none"
+                                        className="flex-grow bg-black/50 border border-transparent p-1 rounded-sm focus:outline-none cursor-default"
+                                        disabled
                                     />
                                     <input 
                                         type="number" 
                                         value={skill.value} 
-                                        onChange={(e) => handleSkillChange(skill.id, 'value', parseInt(e.target.value) || 0)}
+                                        onChange={(e) => handleSkillChange(skill.id, parseInt(e.target.value) || 0)}
                                         className="w-20 bg-black/50 border border-transparent hover:border-gray-700 focus:border-gray-500 p-1 rounded-sm focus:outline-none text-center"
                                     />
-                                    <button onClick={() => removeSkill(skill.id)} className="text-gray-500 hover:text-red-400 font-bold px-2">X</button>
                                 </div>
                             ))}
                         </div>
-                         <button onClick={addSkill} className="mt-4 border border-gray-600 hover:bg-gray-800 px-4 py-1 text-sm transition-colors">Adicionar Perícia</button>
                     </Section>
                 </div>
 
@@ -1713,8 +2052,9 @@ const CharacterSheetPage: React.FC<{ characterId: string; onNavigate: (path: str
                         </div>
                         <div className="flex-grow">
                             <StatusBar label="Vitalidade" stat={character.stats.life} onSave={v => handleStatChange('life', v)} color="bg-green-500" labels={['Crítico', 'Inconsciente', 'Morrendo']} />
-                            <StatusBar label="Estabilidade" stat={character.stats.sanity} onSave={v => handleStatChange('sanity', v)} color="bg-cyan-500" labels={['Traumatizado', '', 'Enlouquecido']} />
+                            <StatusBar label="Estabilidade" stat={character.stats.sanity} onSave={v => handleStatChange('sanity', v)} color="bg-cyan-500" labels={['Traumatizado', '', 'Enlouquecido']} onTest={handleSanityRoll} />
                             <StatusBar label="Exposição" stat={character.stats.occultism} onSave={v => handleStatChange('occultism', v)} color="bg-fuchsia-500" labels={['Ignorante', 'Ciente', 'Exposto']} />
+                            <StatusBar label="Pontos de Esforço" stat={character.stats.effort} onSave={v => handleStatChange('effort', v)} color="bg-gray-400" labels={['Exausto', '', 'Disposto']} />
                         </div>
                     </div>
                     
@@ -1758,15 +2098,29 @@ const CharacterSheetPage: React.FC<{ characterId: string; onNavigate: (path: str
                         )}
                     </Section>
 
-                    <Section title="INVENTÁRIO & CARGA" className="flex-grow">
-                        <Inventory 
-                            items={character.inventory} 
-                            setItems={(newItems) => handleCharacterUpdate(c => ({...c, inventory: typeof newItems === 'function' ? newItems(c.inventory) : newItems}))} 
-                            maxWeight={maxWeight}
-                            totalWeight={totalWeight}
-                            stats={character.stats}
-                            onMaskClick={handleMaskClick}
-                        />
+                    <Section title="INVENTÁRIO & CARGA" className="flex-grow flex flex-col">
+                        <div className="mb-4">
+                            <EditableField 
+                                label="Dinheiro" 
+                                value={`¥${character.money.toLocaleString('pt-BR')}`}
+                                onSave={(newValue) => {
+                                    const numericValue = parseInt(newValue.replace(/[^0-9-]/g, ''), 10);
+                                    if (!isNaN(numericValue)) {
+                                        handleCharacterUpdate(c => ({...c, money: numericValue }));
+                                    }
+                                }}
+                            />
+                        </div>
+                        <div className="flex-grow">
+                             <Inventory 
+                                items={character.inventory} 
+                                setItems={(newItems) => handleCharacterUpdate(c => ({...c, inventory: typeof newItems === 'function' ? newItems(c.inventory) : newItems}))} 
+                                maxWeight={maxWeight}
+                                totalWeight={totalWeight}
+                                stats={character.stats}
+                                onMaskClick={handleMaskClick}
+                            />
+                        </div>
                     </Section>
                 </div>
             </main>
@@ -1803,6 +2157,47 @@ const CharacterSheetPage: React.FC<{ characterId: string; onNavigate: (path: str
                 </Section>
             </div>
             
+             <div className="mt-6 lg:col-span-5">
+                <Section title="ANTECEDENTES">
+                    <div className="space-y-4">
+                        <EditableTextarea
+                            label="Descrição Pessoal"
+                            value={character.background.personalDescription}
+                            onSave={v => handleBackgroundChange('personalDescription', v)}
+                            rows={4}
+                        />
+                        <EditableTextarea
+                            label="Características"
+                            value={character.background.characteristics}
+                            onSave={v => handleBackgroundChange('characteristics', v)}
+                            rows={3}
+                        />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-gray-800">
+                             <EditableList
+                                title="Fobias e Manias"
+                                items={character.background.phobiasManias}
+                                onUpdate={v => handleBackgroundChange('phobiasManias', v)}
+                            />
+                            <EditableList
+                                title="Pessoas Importantes"
+                                items={character.background.importantPeople}
+                                onUpdate={v => handleBackgroundChange('importantPeople', v)}
+                            />
+                             <EditableList
+                                title="Pertences de Valor"
+                                items={character.background.valuableBelongings}
+                                onUpdate={v => handleBackgroundChange('valuableBelongings', v)}
+                            />
+                             <EditableList
+                                title="Locais Importantes"
+                                items={character.background.importantPlaces}
+                                onUpdate={v => handleBackgroundChange('importantPlaces', v)}
+                            />
+                        </div>
+                    </div>
+                </Section>
+            </div>
+
             <DiceRoller 
                 history={rollHistory}
                 onManualRoll={handleManualRoll}
@@ -1834,54 +2229,63 @@ function App() {
     const [route, setRoute] = useState(getRoute());
     const [isLoggedIn, setIsLoggedIn] = useState(sessionStorage.getItem('isMasterLoggedIn') === 'true');
 
+    // Effect to listen for hash changes
+    useEffect(() => {
+        const handleHashChange = () => setRoute(getRoute());
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, []);
+
     const handleNavigation = useCallback((path: string) => {
         window.location.hash = path;
     }, []);
 
+    // Effect to handle all redirection logic
     useEffect(() => {
-        const handleHashChange = () => setRoute(getRoute());
-        window.addEventListener('hashchange', handleHashChange);
+        const { path } = route;
+        const isPublicRoute = (path === 'character' || path === 'portrait');
         
-        if (window.location.hash === '' || window.location.hash === '#/') {
-            window.location.hash = isLoggedIn ? '#/dashboard' : '#/login';
-        }
+        if (isPublicRoute) return; // Do not redirect public routes
 
-        return () => window.removeEventListener('hashchange', handleHashChange);
-    }, [isLoggedIn]);
+        if (isLoggedIn) {
+            if (path !== 'dashboard') {
+                handleNavigation('#/dashboard');
+            }
+        } else { // not logged in
+            if (path !== 'login') {
+                handleNavigation('#/login');
+            }
+        }
+    }, [isLoggedIn, handleNavigation, route]); // Re-run when login or route changes
 
     const handleLoginSuccess = () => {
+        sessionStorage.setItem('isMasterLoggedIn', 'true');
         setIsLoggedIn(true);
-        handleNavigation('#/dashboard');
     };
 
     const handleLogout = () => {
         sessionStorage.removeItem('isMasterLoggedIn');
         setIsLoggedIn(false);
-        handleNavigation('#/login');
     };
 
-    const renderContent = () => {
-        const { path, id } = route;
+    const { path, id } = route;
 
-        if (path === 'character' && id) {
-            return <CharacterSheetPage characterId={id} onNavigate={handleNavigation} isMaster={isLoggedIn} />;
-        }
-        
-        if (path === 'portrait' && id) {
-            return <PortraitPage characterId={id} />;
-        }
+    // --- Render based on current route and auth state ---
+    if (path === 'character' && id) {
+        return <CharacterSheetPage characterId={id} onNavigate={handleNavigation} isMaster={isLoggedIn} />;
+    }
+    if (path === 'portrait' && id) {
+        return <PortraitPage characterId={id} />;
+    }
+    if (path === 'dashboard') {
+        if (isLoggedIn) return <DashboardPage onNavigate={handleNavigation} onLogout={handleLogout} />;
+    }
+    if (path === 'login') {
+        if (!isLoggedIn) return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+    }
 
-        if (isLoggedIn) {
-            if (path === 'dashboard' || path === 'login' || path === '') {
-                 return <DashboardPage onNavigate={handleNavigation} onLogout={handleLogout} />;
-            }
-        }
-        
-        // Default to login page if not logged in or route is unrecognized
-        return <LoginPage onLoginSuccess={handleLoginSuccess} />;
-    };
-
-    return <>{renderContent()}</>;
+    // Fallback for transitional states or initial load before the redirection effect runs
+    return <div className="flex items-center justify-center min-h-screen">CARREGANDO...</div>;
 }
 
 export default App;
